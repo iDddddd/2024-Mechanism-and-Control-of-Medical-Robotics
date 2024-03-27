@@ -210,8 +210,8 @@ void CR5_setEndPose(moveit::planning_interface::MoveGroupInterface &group, Matri
 
     geometry_msgs::Pose target_pose1;
 
-    Quaterniond q_curr_tmp = Quaterniond(CR5_EndPose_input.block<3,3>(0,0));//旋转矩阵转为四元数
-    q_curr_tmp.normalize();//转为四元数之后，需要进行归一化
+    Quaterniond q_curr_tmp = Quaterniond(CR5_EndPose_input.block<3,3>(0,0));
+    q_curr_tmp.normalize();
 
     target_pose1.orientation.x= q_curr_tmp.x();
     target_pose1.orientation.y = q_curr_tmp.y();
@@ -260,7 +260,6 @@ void CR5_setJointValue(moveit::planning_interface::MoveGroupInterface &group, Ve
     
     std::vector<double> joint_group_positions(&CR5_joint_angle[0], CR5_joint_angle.data()+CR5_joint_angle.cols()*CR5_joint_angle.rows());
 
-    cout<<"1111"<<endl;
     group.setJointValueTarget(joint_group_positions);
 
     moveit::planning_interface::MoveGroupInterface::Plan my_plan;
