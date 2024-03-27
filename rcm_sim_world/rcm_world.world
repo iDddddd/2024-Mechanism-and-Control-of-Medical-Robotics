@@ -170,9 +170,9 @@
       <pose frame=''>-0.090381 -0.108633 0 0 -0 0</pose>
     </model>
     <state world_name='default'>
-      <sim_time>1112 263000000</sim_time>
-      <real_time>119 798664780</real_time>
-      <wall_time>1709347152 291407306</wall_time>
+      <sim_time>0</sim_time>
+      <real_time>0</real_time>
+      <wall_time>0</wall_time>
       <iterations>109450</iterations>
       <model name='enterocoelia_model'>
         <pose frame=''>0.27 -0.138277 0 0 -0 0</pose>
