@@ -5,8 +5,19 @@
 
 <link name="world"/>
 
+<!-- <joint name="world_joint" type="fixed">
+  <parent link="world" />
+  <child  link="dummy_link" />
+</joint> -->
+
 
  <link name="dummy_link" />
+
+ <joint name="dummy_joint" type="fixed">
+  <parent link="dummy_link" />
+  <child  link="base_link" />
+</joint>
+
  <link name="base_link">
     <inertial>
       <origin xyz="-8.0961E-06 0.0019103 0.028995" rpy="0 0 0" />
@@ -38,10 +49,7 @@
   </link>
 
 
-  <joint name="dummy_joint" type="fixed">
-    <parent link="dummy_link" />
-    <child  link="base_link" />
-  </joint>
+
 
 
   <link  name="Link1">
@@ -343,13 +351,13 @@
 
   <!-- Camera -->
   <joint name="world_camera_joint1" type="fixed">
-    <origin xyz="${world_camera_offset_x} -${world_camera_offset_y} -${world_camera_offset_z}" rpy="0 0.3 0.785" />
+    <origin xyz="0.3 -0.2 0" rpy="0 0.3 0.785" />
     <parent link="world"/>
     <child link="world_camera_link"/>
   </joint>
   <xacro:usb_camera prefix="world_camera"/>
   <joint name="world_camera_joint2" type="fixed">
-    <origin xyz="-${world_camera_offset_x} ${world_camera_offset_y} ${world_camera_offset_z}" rpy="0.2152591 -0.2106009 -0.8078383" />
+    <origin xyz="-0.0677 0.3535 -0.0209" rpy="0.2152591 -0.2106009 -0.8078383" />
     <parent link="world_camera_link"/>
     <child link="dummy_link"/>
   </joint>
