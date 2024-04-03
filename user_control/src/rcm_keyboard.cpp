@@ -163,8 +163,14 @@ int main(int argc, char **argv)
     /*  if (key_input == 'w')
             rcm_alpha += 1.0 / 180.0 * M_PI;
     */
-        if(key_input == 'q')
-            break;
+        if (key_input == 'w')
+            rcm_alpha += 1.0 / 180.0 * M_PI;
+        else if (key_input == 's')
+            rcm_alpha -= 1.0 / 180.0 * M_PI;
+        else if (key_input == 'a')
+            rcm_beta += 1.0 / 180.0 * M_PI;
+        else if (key_input == 'd')
+            rcm_beta -= 1.0 / 180.0 * M_PI;
 
     /****************************************** RCM motion iteration *******************************************/
         // map RCM angle (rcm_alpha, rcm_beta) to RCM motion posture (rcm_rotation_update)
