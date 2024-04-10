@@ -28,6 +28,7 @@
 #include <termios.h>
 
 #define CVUI_IMPLEMENTATION
+
 #include "cvui.h"
 #include "opencv2/opencv.hpp"
 #include "cv_bridge/cv_bridge.h"
@@ -56,21 +57,19 @@ void CR5_setJointValue(moveit::planning_interface::MoveGroupInterface &group, Ve
 
 VectorXd CR5_getJointValue(moveit::planning_interface::MoveGroupInterface &group,
                            const robot_state::JointModelGroup *joint_model_group);
+
 static cv::Mat hmerge;
+static cv::Mat hand;
+
 char getch();
+
 void target(double &rcm_alpha, double &rcm_beta);
-void imageCallback(const sensor_msgs::ImageConstPtr &msg1,const sensor_msgs::ImageConstPtr &msg2) {
 
-    cv::Mat img1_resized;
-    cv::Mat img2_resized;
-    cv::Size size(640, 480); // 新的尺寸，例如640x480
-    cv::Mat img1 = cv_bridge::toCvShare(msg1, "bgr8")->image;
-    cv::Mat img2 = cv_bridge::toCvShare(msg2, "bgr8")->image;
-    cv::resize(img1, img1_resized, size, 0, 0, cv::INTER_LINEAR);
-    cv::resize(img2, img2_resized, size, 0, 0, cv::INTER_LINEAR);
-    cv::hconcat(img1_resized, img2_resized, hmerge);
+void imageCallback(const sensor_msgs::ImageConstPtr &msg1, const sensor_msgs::ImageConstPtr &msg2);
 
-}
+cv::Point2d detectCenter(cv::Mat image);
+
+bool detectHSColor(const cv::Mat &image, double minHue, double maxHue, double minSat, double maxSat, cv::Mat &mask);
 
 int main(int argc, char **argv) {
 
@@ -80,14 +79,15 @@ int main(int argc, char **argv) {
     ros::ServiceClient client = nh.serviceClient<gazebo_msgs::DeleteModel>("/gazebo/delete_model");
     ros::service::waitForService("/gazebo/delete_model");
 
-    message_filters::Subscriber<sensor_msgs::Image> subscriber_world(nh,"/world_camera/image_raw",100,ros::TransportHints().tcpNoDelay());
-    message_filters::Subscriber<sensor_msgs::Image> subscriber_arm(nh,"/camera/image_raw",100,ros::TransportHints().tcpNoDelay());
+    message_filters::Subscriber<sensor_msgs::Image> subscriber_world(nh, "/world_camera/image_raw", 100,
+                                                                     ros::TransportHints().tcpNoDelay());
+    message_filters::Subscriber<sensor_msgs::Image> subscriber_arm(nh, "/camera/image_raw", 100,
+                                                                   ros::TransportHints().tcpNoDelay());
 
     typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::Image, sensor_msgs::Image> syncPolicy;
     //message_filters::TimeSynchronizer<sensor_msgs::LaserScan,geometry_msgs::PoseWithCovarianceStamped> sync(subscriber_laser, subscriber_pose, 10);
     message_filters::Synchronizer<syncPolicy> sync(syncPolicy(10), subscriber_world, subscriber_arm);
     sync.registerCallback(boost::bind(imageCallback, _1, _2));
-
 
 
     ros::AsyncSpinner spinner(1);
@@ -150,7 +150,19 @@ int main(int argc, char **argv) {
         // get keyboard input
         char key_input;
         cv::imshow("camera", hmerge);
+        //绿色
+        double minHue = 0;
+        double maxHue = 120;
+        double minSat = 100.0; // 饱和度的最小值
+        double maxSat = 255.0; // 饱和度的最大值
+
+        cv::Mat mask; // 这将是函数返回的掩膜
+        // 调用函数
+        detectHSColor(hand, minHue, maxHue, minSat, maxSat, mask);
+
+        cv::imshow("mask",mask);
         key_input = cv::waitKey(1000);
+
         /****************************************** gazebo contact check ****************************************/
         // get tmp end pose (CR5_EndPose)
         Matrix4Xd CR5_EndPose = CR5_getEndPose(group);
@@ -196,7 +208,6 @@ int main(int argc, char **argv) {
         /*  if (key_input == 'w')
                 rcm_alpha += 1.0 / 180.0 * M_PI;
         */
-
         //target(rcm_alpha, rcm_beta);
         switch (key_input) {
             case 'w':
@@ -218,9 +229,9 @@ int main(int argc, char **argv) {
                 rcm_trans -= 0.01;
                 break;
         }
-        cout<<"rcm_alpha: "<<rcm_alpha<<endl;
-        cout<<"rcm_beta: "<<rcm_beta<<endl;
-        cout<<"rcm_trans: "<<rcm_trans<<endl;
+        cout << "rcm_alpha: " << rcm_alpha << endl;
+        cout << "rcm_beta: " << rcm_beta << endl;
+        cout << "rcm_trans: " << rcm_trans << endl;
 
         /****************************************** RCM motion iteration *******************************************/
         // map RCM angle (rcm_alpha, rcm_beta) to RCM motion posture (rcm_rotation_update)
@@ -251,8 +262,6 @@ int main(int argc, char **argv) {
 
 
     }
-
-
     ros::shutdown();
     return 0;
 
@@ -357,6 +366,7 @@ char getch() {
     return buf;
 }
 
+
 void target(double &rcm_alpha, double &rcm_beta) {
     char key_input;
     while (ros::ok()) {
@@ -369,6 +379,66 @@ void target(double &rcm_alpha, double &rcm_beta) {
             rcm_beta += 1.0 / 180.0 * M_PI;
         else if (key_input == 'd')
             rcm_beta -= 1.0 / 180.0 * M_PI;
-        std::cout << "Key Pressed: " << key_input  << std::endl;
+        std::cout << "Key Pressed: " << key_input << std::endl;
     }
+}
+
+void imageCallback(const sensor_msgs::ImageConstPtr &msg1, const sensor_msgs::ImageConstPtr &msg2) {
+
+    cv::Mat img1_resized;
+    cv::Mat img2_resized;
+    cv::Size size(640, 480); // 新的尺寸，例如640x480
+    cv::Mat img1 = cv_bridge::toCvShare(msg1, "bgr8")->image;
+    cv::Mat img2 = cv_bridge::toCvShare(msg2, "bgr8")->image;
+    cv::resize(img1, img1_resized, size, 0, 0, cv::INTER_LINEAR);
+    cv::resize(img2, img2_resized, size, 0, 0, cv::INTER_LINEAR);
+    hand = img2_resized;
+    cv::hconcat(img1_resized, img2_resized, hmerge);
+
+}
+
+// Detect the center of the image
+cv::Point2d detectCenter(cv::Mat image) {
+    std::vector<std::vector<cv::Point>> contours;
+    std::vector<cv::Vec4i> hierarchy;
+    cv::findContours(image.clone(), contours, hierarchy, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE, cv::Point(0, 0));
+    std::vector<cv::Moments> mu(contours.size());
+    for (int i = 0; i < contours.size(); i++) {
+        mu[i] = cv::moments(contours[i], false);
+    }
+    vector<cv::Point2f> mc(contours.size());
+    for (int i = 0; i < contours.size(); i++) {
+        mc[i] = cv::Point2f(mu[i].m10 / mu[i].m00, mu[i].m01 / mu[i].m00);
+    }
+
+    cv::Point2d center;
+    center.x = (mc[0].x);
+    center.y = (mc[0].y);
+    return center;
+}
+
+bool detectHSColor(const cv::Mat &image, double minHue, double maxHue, double minSat, double maxSat, cv::Mat &mask) {
+    cv::Mat hsv;
+    cv::cvtColor(image, hsv, CV_BGR2HSV);
+    std::vector<cv::Mat> channels;
+    split(hsv, channels);
+    cv::Mat mask1, mask2, hueMask;
+    cv::threshold(channels[0], mask1, maxHue, 255, cv::THRESH_BINARY_INV);
+    cv::threshold(channels[0], mask2, minHue, 255, cv::THRESH_BINARY);
+    if (minHue < maxHue) {
+        hueMask = mask1 & mask2;
+    } else {
+        hueMask = mask1 | mask2;
+    }
+    cv::Mat satMask;
+    inRange(channels[1], minSat, maxSat, satMask);
+    mask = hueMask & satMask;
+    if(cv::countNonZero(mask) == 0){
+        return false;
+    }else {
+        return true;
+    }
+/*    cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(5, 5));//5*5的矩形结构元素
+    cv::morphologyEx(mask, mask, cv::MORPH_OPEN, kernel);//开运算
+    cv::morphologyEx(mask, mask, cv::MORPH_CLOSE, kernel);//闭运算*/
 }
