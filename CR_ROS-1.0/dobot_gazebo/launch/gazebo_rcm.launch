@@ -6,7 +6,7 @@
 
   <!--Launch a gazebo world-->
   <include file="$(find gazebo_ros)/launch/empty_world.launch">
-    <arg name="world_name" value="/home/robotics/catkin_ws/src/rcm_sim_world/rcm_world.world"/>
+    <arg name="world_name" value="/home/idear/catkin_ws/src/Robotics/rcm_sim_world/rcm_world.world"/>
     <arg name="paused" value="false"/>
     <arg name="use_sim_time" value="true"/>
     <arg name="gui" value="true"/>

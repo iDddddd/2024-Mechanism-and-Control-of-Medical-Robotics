@@ -184,8 +184,15 @@ int main(int argc, char **argv)
     /*  if (joy_button[2] == 1)
             rcm_beta += 0.3 / 180.0 * M_PI;
     */
-        if(joy_button[5] == 1)
-            break;
+        if (joy_button[3] == 1)
+            rcm_beta += 0.3 / 180.0 * M_PI;
+        if (joy_button[1] == 1)
+            rcm_beta -= 0.3 / 180.0 * M_PI;
+        if (joy_button[2] == 1)
+            rcm_alpha += 0.3 / 180.0 * M_PI;
+        if (joy_button[0] == 1)
+            rcm_alpha -= 0.3 / 180.0 * M_PI;
+
     
     /****************************************** RCM motion iteration *******************************************/
         // map RCM angle (rcm_alpha, rcm_beta) to RCM motion posture (rcm_rotation_update)
