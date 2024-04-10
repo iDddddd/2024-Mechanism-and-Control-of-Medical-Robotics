@@ -29,9 +29,18 @@
 
 #define CVUI_IMPLEMENTATION
 #include "cvui.h"
+#include "opencv2/opencv.hpp"
+#include "cv_bridge/cv_bridge.h"
 
 #include <ros/ros.h>
 #include <gazebo_msgs/DeleteModel.h>
+#include "sensor_msgs/Image.h"
+#include "message_filters/subscriber.h"
+#include <message_filters/synchronizer.h>
+#include <message_filters/sync_policies/approximate_time.h>
+#include <message_filters/time_synchronizer.h>
+#include <boost/thread/thread.hpp>
+#include <boost/bind.hpp>
 
 #include <moveit/move_group_interface/move_group_interface.h>
 // #include <moveit/planning_scene_interface/planning_scene_interface.h>
@@ -47,9 +56,21 @@ void CR5_setJointValue(moveit::planning_interface::MoveGroupInterface &group, Ve
 
 VectorXd CR5_getJointValue(moveit::planning_interface::MoveGroupInterface &group,
                            const robot_state::JointModelGroup *joint_model_group);
-
+static cv::Mat hmerge;
 char getch();
 void target(double &rcm_alpha, double &rcm_beta);
+void imageCallback(const sensor_msgs::ImageConstPtr &msg1,const sensor_msgs::ImageConstPtr &msg2) {
+
+    cv::Mat img1_resized;
+    cv::Mat img2_resized;
+    cv::Size size(640, 480); // 新的尺寸，例如640x480
+    cv::Mat img1 = cv_bridge::toCvShare(msg1, "bgr8")->image;
+    cv::Mat img2 = cv_bridge::toCvShare(msg2, "bgr8")->image;
+    cv::resize(img1, img1_resized, size, 0, 0, cv::INTER_LINEAR);
+    cv::resize(img2, img2_resized, size, 0, 0, cv::INTER_LINEAR);
+    cv::hconcat(img1_resized, img2_resized, hmerge);
+
+}
 
 int main(int argc, char **argv) {
 
@@ -58,6 +79,16 @@ int main(int argc, char **argv) {
 
     ros::ServiceClient client = nh.serviceClient<gazebo_msgs::DeleteModel>("/gazebo/delete_model");
     ros::service::waitForService("/gazebo/delete_model");
+
+    message_filters::Subscriber<sensor_msgs::Image> subscriber_world(nh,"/world_camera/image_raw",100,ros::TransportHints().tcpNoDelay());
+    message_filters::Subscriber<sensor_msgs::Image> subscriber_arm(nh,"/camera/image_raw",100,ros::TransportHints().tcpNoDelay());
+
+    typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::Image, sensor_msgs::Image> syncPolicy;
+    //message_filters::TimeSynchronizer<sensor_msgs::LaserScan,geometry_msgs::PoseWithCovarianceStamped> sync(subscriber_laser, subscriber_pose, 10);
+    message_filters::Synchronizer<syncPolicy> sync(syncPolicy(10), subscriber_world, subscriber_arm);
+    sync.registerCallback(boost::bind(imageCallback, _1, _2));
+
+
 
     ros::AsyncSpinner spinner(1);
     spinner.start();
@@ -118,9 +149,8 @@ int main(int argc, char **argv) {
     while (ros::ok()) {
         // get keyboard input
         char key_input;
-        cv::imshow("RCM", cv::Mat::zeros(200, 200, CV_8UC3));
+        cv::imshow("camera", hmerge);
         key_input = cv::waitKey(1000);
-
         /****************************************** gazebo contact check ****************************************/
         // get tmp end pose (CR5_EndPose)
         Matrix4Xd CR5_EndPose = CR5_getEndPose(group);
@@ -168,27 +198,29 @@ int main(int argc, char **argv) {
         */
 
         //target(rcm_alpha, rcm_beta);
-        if (key_input == 'w')
-            rcm_alpha += 1.0 / 180.0 * M_PI;
-        else if (key_input == 's')
-            rcm_alpha -= 1.0 / 180.0 * M_PI;
-        else if (key_input == 'a')
-            rcm_beta += 1.0 / 180.0 * M_PI;
-        else if (key_input == 'd')
-            rcm_beta -= 1.0 / 180.0 * M_PI;
-        else if (key_input == 'u')
-            rcm_trans += 0.01;
-        else if (key_input == 'i')
-            rcm_trans -= 0.01;
-        else if (key_input == 'j')
-            rcm_len += 0.01;
-        else if (key_input == 'k')
-            rcm_len -= 0.01;
-        else if (key_input == 'q')
-            break;
+        switch (key_input) {
+            case 'w':
+                rcm_alpha += 1.0 / 180.0 * M_PI;
+                break;
+            case 's':
+                rcm_alpha -= 1.0 / 180.0 * M_PI;
+                break;
+            case 'a':
+                rcm_beta += 1.0 / 180.0 * M_PI;
+                break;
+            case 'd':
+                rcm_beta -= 1.0 / 180.0 * M_PI;
+                break;
+            case 'u':
+                rcm_trans += 0.01;
+                break;
+            case 'i':
+                rcm_trans -= 0.01;
+                break;
+        }
         cout<<"rcm_alpha: "<<rcm_alpha<<endl;
         cout<<"rcm_beta: "<<rcm_beta<<endl;
-        cout<<"rcm_trans"<<rcm_trans<<endl;
+        cout<<"rcm_trans: "<<rcm_trans<<endl;
 
         /****************************************** RCM motion iteration *******************************************/
         // map RCM angle (rcm_alpha, rcm_beta) to RCM motion posture (rcm_rotation_update)

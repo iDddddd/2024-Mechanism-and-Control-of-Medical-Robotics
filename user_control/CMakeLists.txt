@@ -11,6 +11,7 @@ find_package(catkin REQUIRED COMPONENTS
   tf
   tf2_ros
   sensor_msgs
+  message_filters
 
   moveit_core
   moveit_msgs
