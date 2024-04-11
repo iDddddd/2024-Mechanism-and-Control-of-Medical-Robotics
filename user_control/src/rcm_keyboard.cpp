@@ -60,6 +60,7 @@ VectorXd CR5_getJointValue(moveit::planning_interface::MoveGroupInterface &group
 
 static cv::Mat hmerge;
 static cv::Mat hand;
+static const double Kp = 16.0;
 
 char getch();
 
@@ -69,7 +70,11 @@ void imageCallback(const sensor_msgs::ImageConstPtr &msg1, const sensor_msgs::Im
 
 cv::Point2d detectCenter(cv::Mat image);
 
-bool detectHSColor(const cv::Mat &image, double minHue, double maxHue, double minSat, double maxSat, cv::Mat &mask);
+int detectHSColor(const cv::Mat &image, double minHue, double maxHue, double minSat, double maxSat, cv::Mat &mask);
+
+void to_blue(double &rcm_alpha, double &rcm_beta,double &rcm_trans);
+void to_green(double &rcm_alpha, double &rcm_beta,double &rcm_trans);
+void to_yellow(double &rcm_alpha, double &rcm_beta,double &rcm_trans);
 
 int main(int argc, char **argv) {
 
@@ -150,18 +155,7 @@ int main(int argc, char **argv) {
         // get keyboard input
         char key_input;
         cv::imshow("camera", hmerge);
-        //绿色
-        double minHue = 0;
-        double maxHue = 120;
-        double minSat = 100.0; // 饱和度的最小值
-        double maxSat = 255.0; // 饱和度的最大值
-
-        cv::Mat mask; // 这将是函数返回的掩膜
-        // 调用函数
-        detectHSColor(hand, minHue, maxHue, minSat, maxSat, mask);
-
-        cv::imshow("mask",mask);
-        key_input = cv::waitKey(1000);
+        key_input = cv::waitKey(3000);
 
         /****************************************** gazebo contact check ****************************************/
         // get tmp end pose (CR5_EndPose)
@@ -227,6 +221,20 @@ int main(int argc, char **argv) {
                 break;
             case 'i':
                 rcm_trans -= 0.01;
+                break;
+            case 'g':
+                to_green(rcm_alpha,rcm_beta,rcm_trans);
+                break;
+            case 'b':
+                to_blue(rcm_alpha, rcm_beta,rcm_trans);
+                break;
+            case 'y':
+                to_yellow(rcm_alpha, rcm_beta,rcm_trans);
+                break;
+            case 'f':
+                rcm_alpha = 0;
+                rcm_beta = 0;
+                rcm_trans = 0;
                 break;
         }
         cout << "rcm_alpha: " << rcm_alpha << endl;
@@ -366,7 +374,6 @@ char getch() {
     return buf;
 }
 
-
 void target(double &rcm_alpha, double &rcm_beta) {
     char key_input;
     while (ros::ok()) {
@@ -417,7 +424,7 @@ cv::Point2d detectCenter(cv::Mat image) {
     return center;
 }
 
-bool detectHSColor(const cv::Mat &image, double minHue, double maxHue, double minSat, double maxSat, cv::Mat &mask) {
+int detectHSColor(const cv::Mat &image, double minHue, double maxHue, double minSat, double maxSat, cv::Mat &mask) {
     cv::Mat hsv;
     cv::cvtColor(image, hsv, CV_BGR2HSV);
     std::vector<cv::Mat> channels;
@@ -433,12 +440,99 @@ bool detectHSColor(const cv::Mat &image, double minHue, double maxHue, double mi
     cv::Mat satMask;
     inRange(channels[1], minSat, maxSat, satMask);
     mask = hueMask & satMask;
-    if(cv::countNonZero(mask) == 0){
-        return false;
-    }else {
-        return true;
+    //检测色块的大小
+    int nonZeroPixels = cv::countNonZero(mask);
+
+    return nonZeroPixels;
+}
+
+void to_blue(double &rcm_alpha, double &rcm_beta,double &rcm_trans){
+
+    double minHue = 110.0; // 蓝色的最小色调值
+    double maxHue = 130.0; // 蓝色的最大色调值
+    double minSat = 100.0; // 饱和度的最小值
+    double maxSat = 255.0; // 饱和度的最大值
+    cv::Mat mask; // 这将是函数返回的掩膜
+    // 调用函数
+    int nonZeroPixels = detectHSColor(hand, minHue, maxHue, minSat, maxSat, mask);
+    if(nonZeroPixels == 0){
+        cout << "not found blue" << endl;
+        rcm_alpha = 0;
+        rcm_beta = 0;
+        rcm_trans = 0;
+        if(cv::getWindowProperty("mask", cv::WND_PROP_AUTOSIZE) == -1) {
+            return;
+        }else {
+            cv::destroyWindow("mask");
+            return;
+        }
     }
-/*    cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(5, 5));//5*5的矩形结构元素
-    cv::morphologyEx(mask, mask, cv::MORPH_OPEN, kernel);//开运算
-    cv::morphologyEx(mask, mask, cv::MORPH_CLOSE, kernel);//闭运算*/
+    cv::imshow("mask",mask);
+    cv::Point2d blue_center = detectCenter(mask);
+    cout << "blue_center: " << blue_center << endl;
+    cout << "blue_size: " << nonZeroPixels << endl;
+    rcm_alpha += (Kp * (blue_center.x - 320)/nonZeroPixels/180.0 * M_PI);
+    rcm_beta += (Kp * (blue_center.y - 240)/nonZeroPixels/180.0 * M_PI);
+    rcm_trans += 0.02;
+}
+
+void to_green(double &rcm_alpha, double &rcm_beta,double &rcm_trans){
+
+    double minHue = 30.0; // 蓝色的最小色调值
+    double maxHue = 60.0;// 蓝色的最大色调值
+    double minSat = 100.0; // 饱和度的最小值
+    double maxSat = 255.0; // 饱和度的最大值
+    cv::Mat mask; // 这将是函数返回的掩膜
+    // 调用函数
+    int nonZeroPixels = detectHSColor(hand, minHue, maxHue, minSat, maxSat, mask);
+    if(nonZeroPixels == 0){
+        cout << "not found green" << endl;
+        rcm_alpha = 0;
+        rcm_beta = 0;
+        rcm_trans = 0;
+        if(cv::getWindowProperty("mask", cv::WND_PROP_AUTOSIZE) == -1) {
+            return;
+        }else {
+            cv::destroyWindow("mask");
+            return;
+        }
+    }
+    cv::imshow("mask",mask);
+    cv::Point2d green_center = detectCenter(mask);
+    cout << "green_center: " << green_center << endl;
+    cout << "green_size: " << nonZeroPixels << endl;
+    rcm_alpha += (Kp * (green_center.x - 320)/nonZeroPixels/180.0 * M_PI);
+    rcm_beta += (Kp * (green_center.y - 240)/nonZeroPixels/180.0 * M_PI);
+    rcm_trans += 0.02;
+}
+
+void to_yellow(double &rcm_alpha, double &rcm_beta,double &rcm_trans){
+
+    double minHue = 0.0; // 黄色的最小色调值
+    double maxHue = 30.0; // 黄色的最大色调值
+    double minSat = 100.0; // 饱和度的最小值
+    double maxSat = 255.0; // 饱和度的最大值
+    cv::Mat mask; // 这将是函数返回的掩膜
+    // 调用函数
+    int nonZeroPixels = detectHSColor(hand, minHue, maxHue, minSat, maxSat, mask);
+    if(nonZeroPixels == 0){
+        cout << "not found yellow" << endl;
+        rcm_alpha = 0;
+        rcm_beta = 0;
+        rcm_trans = 0;
+        if(cv::getWindowProperty("mask", cv::WND_PROP_AUTOSIZE) == -1) {
+            return;
+        }else {
+            cv::destroyWindow("mask");
+            return;
+        }
+    }
+    cv::imshow("mask",mask);
+
+    cv::Point2d yellow_center = detectCenter(mask);
+    cout << "yellow_center: " << yellow_center << endl;
+    cout << "yellow_size: " << nonZeroPixels << endl;
+    rcm_alpha += (Kp * (yellow_center.x - 320)/nonZeroPixels/180.0 * M_PI);
+    rcm_beta += (Kp * (yellow_center.y - 240)/nonZeroPixels/180.0 * M_PI);
+    rcm_trans += 0.02;
 }
