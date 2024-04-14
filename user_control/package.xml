@@ -66,7 +66,6 @@
   <build_depend>moveit_ros_move_group</build_depend>
   <build_depend>moveit_ros_planning_interface</build_depend>
   <build_depend>moveit_ros_perception</build_depend>
-
   <build_depend>cv_bridge</build_depend>
 
 
@@ -90,7 +89,6 @@
   <build_export_depend>moveit_ros_move_group</build_export_depend>
   <build_export_depend>moveit_ros_planning_interface</build_export_depend>
   <build_export_depend>moveit_ros_perception</build_export_depend>
-
   <build_export_depend>cv_bridge</build_export_depend>
 
 
@@ -115,7 +113,6 @@
   <exec_depend>moveit_ros_move_group</exec_depend>
   <exec_depend>moveit_ros_planning_interface</exec_depend>
   <exec_depend>moveit_ros_perception</exec_depend>
-
   <exec_depend>cv_bridge</exec_depend>
 
   <!-- The export tag contains other, unspecified, tags -->

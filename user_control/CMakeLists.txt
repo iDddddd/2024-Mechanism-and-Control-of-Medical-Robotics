@@ -37,8 +37,8 @@ catkin_package(
 #  LIBRARIES user_control
 #  CATKIN_DEPENDS roscpp rospy std_msgs
 #  DEPENDS system_lib
-)
 
+)
 
 include_directories(
 # include
@@ -46,9 +46,12 @@ include_directories(
   ${OpenCV_INCLUDE_DIRS}
 )
 
-
 add_executable(rcm_keyboard src/rcm_keyboard.cpp)
 target_link_libraries(rcm_keyboard ${catkin_LIBRARIES})
 
 add_executable(rcm_joystick src/rcm_joystick.cpp)
 target_link_libraries(rcm_joystick ${catkin_LIBRARIES})
+
+add_executable(rcm_hand src/rcm_hand.cpp)
+target_link_libraries(rcm_hand ${catkin_LIBRARIES})
+
