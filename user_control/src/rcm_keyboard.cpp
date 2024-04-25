@@ -60,7 +60,7 @@ VectorXd CR5_getJointValue(moveit::planning_interface::MoveGroupInterface &group
 
 static cv::Mat hmerge;
 static cv::Mat hand;
-static const double Kp = 16.0;
+
 
 char getch();
 
@@ -471,9 +471,9 @@ void to_blue(double &rcm_alpha, double &rcm_beta,double &rcm_trans){
     cv::Point2d blue_center = detectCenter(mask);
     cout << "blue_center: " << blue_center << endl;
     cout << "blue_size: " << nonZeroPixels << endl;
-    rcm_alpha += (Kp * (blue_center.x - 320)/nonZeroPixels/180.0 * M_PI);
-    rcm_beta += (Kp * (blue_center.y - 240)/nonZeroPixels/180.0 * M_PI);
-    rcm_trans += 0.02;
+    rcm_alpha += (0.01*(blue_center.x - 320)/180.0 * M_PI);
+    rcm_beta += (0.01*(blue_center.y - 240)/180.0 * M_PI);
+    rcm_trans += 0.01;
 }
 
 void to_green(double &rcm_alpha, double &rcm_beta,double &rcm_trans){
@@ -501,9 +501,9 @@ void to_green(double &rcm_alpha, double &rcm_beta,double &rcm_trans){
     cv::Point2d green_center = detectCenter(mask);
     cout << "green_center: " << green_center << endl;
     cout << "green_size: " << nonZeroPixels << endl;
-    rcm_alpha += (Kp * (green_center.x - 320)/nonZeroPixels/180.0 * M_PI);
-    rcm_beta += (Kp * (green_center.y - 240)/nonZeroPixels/180.0 * M_PI);
-    rcm_trans += 0.02;
+    rcm_alpha += (0.01*(green_center.x - 320)/180.0 * M_PI);
+    rcm_beta += (0.01*(green_center.y - 240)/180.0 * M_PI);
+    rcm_trans += 0.01;
 }
 
 void to_yellow(double &rcm_alpha, double &rcm_beta,double &rcm_trans){
@@ -532,7 +532,7 @@ void to_yellow(double &rcm_alpha, double &rcm_beta,double &rcm_trans){
     cv::Point2d yellow_center = detectCenter(mask);
     cout << "yellow_center: " << yellow_center << endl;
     cout << "yellow_size: " << nonZeroPixels << endl;
-    rcm_alpha += (Kp * (yellow_center.x - 320)/nonZeroPixels/180.0 * M_PI);
-    rcm_beta += (Kp * (yellow_center.y - 240)/nonZeroPixels/180.0 * M_PI);
-    rcm_trans += 0.02;
+    rcm_alpha += (0.01*(yellow_center.x - 320)/180.0 * M_PI);
+    rcm_beta += (0.01*(yellow_center.y - 240)/180.0 * M_PI);
+    rcm_trans += 0.01;
 }

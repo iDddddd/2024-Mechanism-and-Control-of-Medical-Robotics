@@ -45,6 +45,7 @@
 #include <message_filters/time_synchronizer.h>
 #include <boost/thread/thread.hpp>
 #include <boost/bind.hpp>
+#include <std_msgs/Int32MultiArray.h>
 
 #include <moveit/move_group_interface/move_group_interface.h>
 // #include <moveit/planning_scene_interface/planning_scene_interface.h>
@@ -63,6 +64,8 @@ VectorXd CR5_getJointValue(moveit::planning_interface::MoveGroupInterface &group
 
 static cv::Mat hmerge;
 static cv::Mat hand;
+int hand_x;
+int hand_y;
 static const double Kp = 16.0;
 
 char getch();
@@ -70,6 +73,7 @@ char getch();
 void target(double &rcm_alpha, double &rcm_beta);
 
 void imageCallback(const sensor_msgs::ImageConstPtr &msg1, const sensor_msgs::ImageConstPtr &msg2);
+void centerCallback(const std_msgs::Int32MultiArray::ConstPtr &msg);
 
 cv::Point2d detectCenter(cv::Mat image);
 
@@ -80,7 +84,7 @@ int main(int argc, char **argv) {
 
     ros::init(argc, argv, "rcm_keyboard_node");
     ros::NodeHandle nh;
-
+  //  execlp("roslaunch", "roslaunch", "user_control","hand_tracking.launch", NULL);
     ros::ServiceClient client = nh.serviceClient<gazebo_msgs::DeleteModel>("/gazebo/delete_model");
     ros::service::waitForService("/gazebo/delete_model");
 
@@ -88,7 +92,8 @@ int main(int argc, char **argv) {
                                                                      ros::TransportHints().tcpNoDelay());
     message_filters::Subscriber<sensor_msgs::Image> subscriber_arm(nh, "/camera/image_raw", 100,
                                                                    ros::TransportHints().tcpNoDelay());
-
+    //接收消息
+  //  ros::Subscriber sub = nh.subscribe<std_msgs::Int32MultiArray>("/hand_tracking", 100, centerCallback);
     typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::Image, sensor_msgs::Image> syncPolicy;
     //message_filters::TimeSynchronizer<sensor_msgs::LaserScan,geometry_msgs::PoseWithCovarianceStamped> sync(subscriber_laser, subscriber_pose, 10);
     message_filters::Synchronizer<syncPolicy> sync(syncPolicy(10), subscriber_world, subscriber_arm);
@@ -146,35 +151,10 @@ int main(int argc, char **argv) {
     /**********************************************************************************************************/
 
     //打开摄像头
-    // 创建一个VideoCapture对象，参数为摄像头的ID，一般电脑内置摄像头的ID为0，外接的为1。
-    cv::VideoCapture cap(0);
-    // 检查摄像头是否成功打开
-    if (!cap.isOpened()) {
-        std::cout << "Error opening video stream or file" << std::endl;
-        return -1;
-    }
 
     while (ros::ok()) {
-        //识别手部
-        double minHue = 0;
-        double maxHue = 20;
-        double minSat = 30;
-        double maxSat = 255;
-        cv::Mat mask; // 这将是函数返回的掩膜
-        cv::imshow("camera", hmerge);
 
-        cv::Mat frame;
-        // 从摄像头捕获一帧图像
-        cap >> frame;
-        // 如果帧为空则退出循环
-        if (frame.empty())
-            break;
-        // 显示捕获的帧
-        cv::imshow("Frame", frame);
-        drawing(frame);
-        int nonZeroPixels = detectHSColor(frame, minHue, maxHue, minSat, maxSat, mask);
-        cv::Point2d center = detectCenter(mask);
-        cv::imshow("mask",mask);
+        cv::imshow("mask", hmerge);
         cv::waitKey(100);
 
         /****************************************** gazebo contact check ****************************************/
@@ -282,8 +262,6 @@ int main(int argc, char **argv) {
 
     }
 
-    // 释放VideoCapture对象
-    cap.release();
     // 关闭所有窗口
     cv::destroyAllWindows();
 
@@ -420,7 +398,11 @@ void imageCallback(const sensor_msgs::ImageConstPtr &msg1, const sensor_msgs::Im
     cv::hconcat(img1_resized, img2_resized, hmerge);
 
 }
-
+void centerCallback(const std_msgs::Int32MultiArray::ConstPtr &msg){
+    hand_x = msg->data[0];
+    hand_y = msg->data[1];
+    cout << "hand_x: " << hand_x << " hand_y: " << hand_y << endl;
+}
 // Detect the center of the image
 cv::Point2d detectCenter(cv::Mat image) {
     std::vector<std::vector<cv::Point>> contours;

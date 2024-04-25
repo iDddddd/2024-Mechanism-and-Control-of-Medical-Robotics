@@ -20,6 +20,7 @@ find_package(catkin REQUIRED COMPONENTS
   moveit_ros_planning_interface
   moveit_ros_perception
 
+  dobot_bringup
   cv_bridge  
 )
 find_package(OpenCV REQUIRED)
@@ -39,6 +40,10 @@ catkin_package(
 #  DEPENDS system_lib
 
 )
+catkin_install_python(PROGRAMS
+    src/handtracking.py
+    DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
 
 include_directories(
 # include
@@ -55,3 +60,8 @@ target_link_libraries(rcm_joystick ${catkin_LIBRARIES})
 add_executable(rcm_hand src/rcm_hand.cpp)
 target_link_libraries(rcm_hand ${catkin_LIBRARIES})
 
+add_executable(real_rcm_keyboard src/real_rcm_keyboard.cpp)
+target_link_libraries(real_rcm_keyboard ${catkin_LIBRARIES})
+
+add_executable(real_rcm_joystick src/real_rcm_joystick.cpp)
+target_link_libraries(real_rcm_joystick ${catkin_LIBRARIES})

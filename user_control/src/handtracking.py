@@ -2,10 +2,13 @@ import cv2
 import mediapipe as mp
 import time
 import math
+import rospy
+from std_msgs.msg import Int32MultiArray
 
-
-if __name__ == '__main__':
-
+if __name__ == "__main__":
+    rospy.init_node("hand_tracking")
+    pub = rospy.Publisher("hand_tracking", Int32MultiArray, queue_size=10)
+    rate = rospy.Rate(20)
     # 打开摄像头
     cap = cv2.VideoCapture(0)
     mpHands = mp.solutions.hands
@@ -46,9 +49,11 @@ if __name__ == '__main__':
                         finger_point.append([x,y])
                     if id == 4:
                         cv2.circle(img, (x, y), 15, (255, 0, 0), cv2.FILLED)
-                        print(id, x, y)
                         # 发布消息
-                        msg = [x, y]
+                        msg = Int32MultiArray()
+                        msg.data = [x, y]
+                        pub.publish(msg)
+
 
                 #遍历每一根手指列表，计算其构成的三角形的三边长，这里使用2，6，10，14，18所对应的角进行判断
                 for id,point in enumerate(finger):
