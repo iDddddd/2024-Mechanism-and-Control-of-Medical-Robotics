@@ -84,7 +84,7 @@ int main(int argc, char **argv) {
 
     ros::init(argc, argv, "rcm_keyboard_node");
     ros::NodeHandle nh;
-  //  execlp("roslaunch", "roslaunch", "user_control","hand_tracking.launch", NULL);
+    //execlp("roslaunch", "roslaunch", "user_control","hand_tracking.launch", NULL);
     ros::ServiceClient client = nh.serviceClient<gazebo_msgs::DeleteModel>("/gazebo/delete_model");
     ros::service::waitForService("/gazebo/delete_model");
 
@@ -93,7 +93,7 @@ int main(int argc, char **argv) {
     message_filters::Subscriber<sensor_msgs::Image> subscriber_arm(nh, "/camera/image_raw", 100,
                                                                    ros::TransportHints().tcpNoDelay());
     //接收消息
-  //  ros::Subscriber sub = nh.subscribe<std_msgs::Int32MultiArray>("/hand_tracking", 100, centerCallback);
+    ros::Subscriber sub = nh.subscribe<std_msgs::Int32MultiArray>("/hand_tracking", 100, centerCallback);
     typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::Image, sensor_msgs::Image> syncPolicy;
     //message_filters::TimeSynchronizer<sensor_msgs::LaserScan,geometry_msgs::PoseWithCovarianceStamped> sync(subscriber_laser, subscriber_pose, 10);
     message_filters::Synchronizer<syncPolicy> sync(syncPolicy(10), subscriber_world, subscriber_arm);

@@ -7,7 +7,7 @@ from std_msgs.msg import Int32MultiArray
 
 if __name__ == "__main__":
     rospy.init_node("hand_tracking")
-    pub = rospy.Publisher("hand_tracking", Int32MultiArray, queue_size=10)
+    pub = rospy.Publisher("/hand_tracking", Int32MultiArray, queue_size=100)
     rate = rospy.Rate(20)
     # 打开摄像头
     cap = cv2.VideoCapture(0)
@@ -96,6 +96,11 @@ if __name__ == "__main__":
 
             if cv2.waitKey(1) == ord('q'):
                 break
+        else:
+            msg = Int32MultiArray()
+            msg.data = [0,0]
+            pub.publish(msg)
+
 
     cap.release()
     cv2.destroyAllWindows()

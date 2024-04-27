@@ -60,11 +60,14 @@ VectorXd CR5_getJointValue(moveit::planning_interface::MoveGroupInterface &group
 
 static cv::Mat hmerge;
 static cv::Mat hand;
+static cv::Mat world;
+bool green_flag = 0;
+bool yellow_flag = 0;
+bool blue_flag = 0;
+bool auto_flag = false;
+static double Kp=1.0;
 
-
-char getch();
-
-void target(double &rcm_alpha, double &rcm_beta);
+void arm_reset(double &rcm_alpha, double &rcm_beta,double &rcm_trans);
 
 void imageCallback(const sensor_msgs::ImageConstPtr &msg1, const sensor_msgs::ImageConstPtr &msg2);
 
@@ -75,6 +78,7 @@ int detectHSColor(const cv::Mat &image, double minHue, double maxHue, double min
 void to_blue(double &rcm_alpha, double &rcm_beta,double &rcm_trans);
 void to_green(double &rcm_alpha, double &rcm_beta,double &rcm_trans);
 void to_yellow(double &rcm_alpha, double &rcm_beta,double &rcm_trans);
+
 
 int main(int argc, char **argv) {
 
@@ -99,9 +103,7 @@ int main(int argc, char **argv) {
     spinner.start();
 
     /*********************************** gazebo env param init ******************************************/
-    bool green_flag = 0;
-    bool yellow_flag = 0;
-    bool blue_flag = 0;
+
     Vector3d p_yellow_wb(0.550602, -0.082265, 0.002491);
     Vector3d p_blue_wb(0.464286, -0.128259, 0.002491);
     Vector3d p_green_wb(0.361654, -0.094127, 0.002491);
@@ -109,13 +111,15 @@ int main(int argc, char **argv) {
 
 
     /*********************************** CR5-moveit & RCM point init ************************************/
-    // moveit planning group init 
+    // moveit planning group init
     static const std::string PLANNING_GROUP = "cr5_arm";
     moveit::planning_interface::MoveGroupInterface group(PLANNING_GROUP);
     const robot_state::JointModelGroup *joint_model_group = group.getCurrentState()->getJointModelGroup(PLANNING_GROUP);
+
     // Get original joint angle 
     VectorXd CR5_joint_angle = CR5_getJointValue(group, joint_model_group);
     cout << CR5_joint_angle.transpose() << endl;
+    reset:
     // Set initial joint angle 
     VectorXd CR5_joint_angle_init = VectorXd::Zero(6);
     CR5_joint_angle_init[0] = 0;
@@ -152,11 +156,29 @@ int main(int argc, char **argv) {
     cout << "up u, down i" << endl;
     cout << "input now!" << endl;
     while (ros::ok()) {
+        cv::imshow("camera", hmerge);
         // get keyboard input
         char key_input;
-        cv::imshow("camera", hmerge);
-        key_input = cv::waitKey(3000);
+        //auto mode
+        if(auto_flag){
+            char key;
+            key=cv::waitKey(10);
+            if(key == 'q'){
+                auto_flag = 0;
+            }
+            if(yellow_flag == 0)
+                key_input = 'y';
+            else if(blue_flag == 0)
+                key_input = 'b';
+            else if(green_flag == 0)
+                key_input = 'g';
+            Kp=0.2;
 
+            goto move;
+        }
+        Kp=1.0;
+        key_input = cv::waitKey(1000);
+        move:
         /****************************************** gazebo contact check ****************************************/
         // get tmp end pose (CR5_EndPose)
         Matrix4Xd CR5_EndPose = CR5_getEndPose(group);
@@ -168,29 +190,36 @@ int main(int argc, char **argv) {
         Vector3d ptip_wb = ptip_base.block<3, 1>(0, 0);
         ptip_wb(2) += 0.08;
         // Check whether the contact is successful
-        if ((p_yellow_wb - ptip_wb).norm() < 0.015) {
-            yellow_flag = 1;
-            gazebo_msgs::DeleteModel deModel;
-            deModel.request.model_name = "rcm_tp_yellow";
-            client.call(deModel);
-            cout << "rcm_tp_yellow" << endl;
-        }
-        if ((p_blue_wb - ptip_wb).norm() < 0.015) {
-            blue_flag = 1;
-            gazebo_msgs::DeleteModel deModel;
-            deModel.request.model_name = "rcm_tp_blue";
-            client.call(deModel);
-            cout << "rcm_tp_blue" << endl;
-        }
-        if ((p_green_wb - ptip_wb).norm() < 0.015) {
-            green_flag = 1;
-            gazebo_msgs::DeleteModel deModel;
-            deModel.request.model_name = "rcm_tp_green";
-            client.call(deModel);
-            cout << "rcm_tp_green" << endl;
-        }
+        if(yellow_flag == 0)
+            if ((p_yellow_wb - ptip_wb).norm() < 0.015) {
+                yellow_flag = 1;
+                gazebo_msgs::DeleteModel deModel;
+                deModel.request.model_name = "rcm_tp_yellow";
+                client.call(deModel);
+                cout << "rcm_tp_yellow" << endl;
+                goto reset;
+            }
+        if(blue_flag == 0)
+            if ((p_blue_wb - ptip_wb).norm() < 0.015) {
+                blue_flag = 1;
+                gazebo_msgs::DeleteModel deModel;
+                deModel.request.model_name = "rcm_tp_blue";
+                client.call(deModel);
+                cout << "rcm_tp_blue" << endl;
+                goto reset;
+            }
+        if(green_flag == 0)
+            if ((p_green_wb - ptip_wb).norm() < 0.015) {
+                green_flag = 1;
+                gazebo_msgs::DeleteModel deModel;
+                deModel.request.model_name = "rcm_tp_green";
+                client.call(deModel);
+                cout << "rcm_tp_green" << endl;
+                goto reset;
+            }
         if (green_flag == 1 && yellow_flag == 1 && blue_flag == 1) {
             cout << "success" << endl;
+            auto_flag = 0;
             break;
         }
 
@@ -203,6 +232,7 @@ int main(int argc, char **argv) {
                 rcm_alpha += 1.0 / 180.0 * M_PI;
         */
         //target(rcm_alpha, rcm_beta);
+
         switch (key_input) {
             case 'w':
                 rcm_alpha += 1.0 / 180.0 * M_PI;
@@ -230,6 +260,9 @@ int main(int argc, char **argv) {
                 break;
             case 'y':
                 to_yellow(rcm_alpha, rcm_beta,rcm_trans);
+                break;
+            case 'r':
+                auto_flag = 1;
                 break;
             case 'f':
                 rcm_alpha = 0;
@@ -353,42 +386,6 @@ VectorXd CR5_getJointValue(moveit::planning_interface::MoveGroupInterface &group
 
 }
 
-char getch() {
-    system("stty -icanon");
-    char buf = 0;
-    struct termios old = {0};
-    if (tcgetattr(0, &old) < 0)
-        perror("tcsetattr()");
-    old.c_lflag &= ~ICANON;
-    old.c_lflag &= ~ECHO;
-    old.c_cc[VMIN] = 1;
-    old.c_cc[VTIME] = 0;
-    if (tcsetattr(0, TCSANOW, &old) < 0)
-        perror("tcsetattr ICANON");
-    if (read(0, &buf, 1) < 0)
-        perror("read()");
-    old.c_lflag |= ICANON;
-    old.c_lflag |= ECHO;
-    if (tcsetattr(0, TCSADRAIN, &old) < 0)
-        perror("tcsetattr ~ICANON");
-    return buf;
-}
-
-void target(double &rcm_alpha, double &rcm_beta) {
-    char key_input;
-    while (ros::ok()) {
-        key_input = getch(); // 获取按键
-        if (key_input == 'w')
-            rcm_alpha += 1.0 / 180.0 * M_PI;
-        else if (key_input == 's')
-            rcm_alpha -= 1.0 / 180.0 * M_PI;
-        else if (key_input == 'a')
-            rcm_beta += 1.0 / 180.0 * M_PI;
-        else if (key_input == 'd')
-            rcm_beta -= 1.0 / 180.0 * M_PI;
-        std::cout << "Key Pressed: " << key_input << std::endl;
-    }
-}
 
 void imageCallback(const sensor_msgs::ImageConstPtr &msg1, const sensor_msgs::ImageConstPtr &msg2) {
 
@@ -400,6 +397,7 @@ void imageCallback(const sensor_msgs::ImageConstPtr &msg1, const sensor_msgs::Im
     cv::resize(img1, img1_resized, size, 0, 0, cv::INTER_LINEAR);
     cv::resize(img2, img2_resized, size, 0, 0, cv::INTER_LINEAR);
     hand = img2_resized;
+    world = img1_resized;
     cv::hconcat(img1_resized, img2_resized, hmerge);
 
 }
@@ -453,13 +451,16 @@ void to_blue(double &rcm_alpha, double &rcm_beta,double &rcm_trans){
     double minSat = 100.0; // 饱和度的最小值
     double maxSat = 255.0; // 饱和度的最大值
     cv::Mat mask; // 这将是函数返回的掩膜
+    cv::Mat world_mask;
     // 调用函数
     int nonZeroPixels = detectHSColor(hand, minHue, maxHue, minSat, maxSat, mask);
-    if(nonZeroPixels == 0){
+    int world_nonZeroPixels = detectHSColor(world, minHue, maxHue, minSat, maxSat, world_mask);
+    if(world_nonZeroPixels == 0){
+//        if(rcm_alpha == 0 && rcm_beta == 0&&rcm_trans== 0){
+//           blue_flag = 1;
+//        }
         cout << "not found blue" << endl;
-        rcm_alpha = 0;
-        rcm_beta = 0;
-        rcm_trans = 0;
+
         if(cv::getWindowProperty("mask", cv::WND_PROP_AUTOSIZE) == -1) {
             return;
         }else {
@@ -471,9 +472,9 @@ void to_blue(double &rcm_alpha, double &rcm_beta,double &rcm_trans){
     cv::Point2d blue_center = detectCenter(mask);
     cout << "blue_center: " << blue_center << endl;
     cout << "blue_size: " << nonZeroPixels << endl;
-    rcm_alpha += (0.01*(blue_center.x - 320)/180.0 * M_PI);
-    rcm_beta += (0.01*(blue_center.y - 240)/180.0 * M_PI);
-    rcm_trans += 0.01;
+    rcm_alpha += (0.01*(blue_center.x - 320)/180.0 * M_PI)*Kp;
+    rcm_beta += (0.01*(blue_center.y - 240)/180.0 * M_PI)*Kp;
+    rcm_trans += 0.01*Kp;
 }
 
 void to_green(double &rcm_alpha, double &rcm_beta,double &rcm_trans){
@@ -486,10 +487,11 @@ void to_green(double &rcm_alpha, double &rcm_beta,double &rcm_trans){
     // 调用函数
     int nonZeroPixels = detectHSColor(hand, minHue, maxHue, minSat, maxSat, mask);
     if(nonZeroPixels == 0){
+//        if(rcm_alpha == 0 && rcm_beta == 0&&rcm_trans== 0){
+//            green_flag = 1;
+//        }
         cout << "not found green" << endl;
-        rcm_alpha = 0;
-        rcm_beta = 0;
-        rcm_trans = 0;
+
         if(cv::getWindowProperty("mask", cv::WND_PROP_AUTOSIZE) == -1) {
             return;
         }else {
@@ -501,9 +503,9 @@ void to_green(double &rcm_alpha, double &rcm_beta,double &rcm_trans){
     cv::Point2d green_center = detectCenter(mask);
     cout << "green_center: " << green_center << endl;
     cout << "green_size: " << nonZeroPixels << endl;
-    rcm_alpha += (0.01*(green_center.x - 320)/180.0 * M_PI);
-    rcm_beta += (0.01*(green_center.y - 240)/180.0 * M_PI);
-    rcm_trans += 0.01;
+    rcm_alpha += (0.01*(green_center.x - 320)/180.0 * M_PI)*Kp;
+    rcm_beta += (0.01*(green_center.y - 240)/180.0 * M_PI)*Kp;
+    rcm_trans += 0.01*Kp;
 }
 
 void to_yellow(double &rcm_alpha, double &rcm_beta,double &rcm_trans){
@@ -516,10 +518,10 @@ void to_yellow(double &rcm_alpha, double &rcm_beta,double &rcm_trans){
     // 调用函数
     int nonZeroPixels = detectHSColor(hand, minHue, maxHue, minSat, maxSat, mask);
     if(nonZeroPixels == 0){
+//        if(rcm_alpha == 0 && rcm_beta == 0&&rcm_trans== 0){
+//            yellow_flag = 1;
+//        }
         cout << "not found yellow" << endl;
-        rcm_alpha = 0;
-        rcm_beta = 0;
-        rcm_trans = 0;
         if(cv::getWindowProperty("mask", cv::WND_PROP_AUTOSIZE) == -1) {
             return;
         }else {
@@ -532,7 +534,30 @@ void to_yellow(double &rcm_alpha, double &rcm_beta,double &rcm_trans){
     cv::Point2d yellow_center = detectCenter(mask);
     cout << "yellow_center: " << yellow_center << endl;
     cout << "yellow_size: " << nonZeroPixels << endl;
-    rcm_alpha += (0.01*(yellow_center.x - 320)/180.0 * M_PI);
-    rcm_beta += (0.01*(yellow_center.y - 240)/180.0 * M_PI);
-    rcm_trans += 0.01;
+    rcm_alpha += (0.01*(yellow_center.x - 320)/180.0 * M_PI)*Kp;
+    rcm_beta += (0.01*(yellow_center.y - 240)/180.0 * M_PI)*Kp;
+    rcm_trans += 0.01*Kp;
+}
+void arm_reset(double &rcm_alpha, double &rcm_beta,double &rcm_trans){
+    if(rcm_alpha > 0.01){
+        rcm_alpha -= 0.01;
+    }else if(rcm_alpha < -0.01){
+        rcm_alpha += 0.01;
+    } else{
+        rcm_alpha = 0;
+    }
+    if(rcm_beta > 0.01){
+        rcm_beta -= 0.01;
+    }else if(rcm_beta < -0.01){
+        rcm_beta += 0.01;
+    } else{
+        rcm_beta = 0;
+    }
+    if(rcm_trans > 0.01){
+        rcm_trans -= 0.01;
+    } else if(rcm_trans < -0.01){
+        rcm_trans += 0.01;
+    }else{
+        rcm_trans = 0;
+    }
 }
