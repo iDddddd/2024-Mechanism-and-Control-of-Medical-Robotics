@@ -44,19 +44,15 @@
 using namespace std;
 using namespace Eigen;
 static cv::Mat usb_img;
-static const double Kp = 10.0;
+static const double Kp = 0.5;
 
 Vector3d transR2RPY(Matrix3d t, string xyz);
 
-void imageCallback(const sensor_msgs::ImageConstPtr &msg) {
-    cv::Mat img_resized;
-    cv::Size size(640, 480); // 新的尺寸，例如640x480
-    cv::Mat img = cv_bridge::toCvShare(msg, "bgr8")->image;
-    cv::resize(img, img_resized, size, 0, 0, cv::INTER_LINEAR);
-    usb_img = img_resized;
-}
-
 void to_blue(double &rcm_alpha, double &rcm_beta, double &rcm_trans);
+
+void to_green(double &rcm_alpha, double &rcm_beta, double &rcm_trans);
+
+void to_yellow(double &rcm_alpha, double &rcm_beta, double &rcm_trans);
 
 cv::Point2d detectCenter(cv::Mat image);
 
@@ -78,9 +74,6 @@ int main(int argc, char **argv) {
 //    ros::Subscriber dobot_subscriber = nh.subscribe<dobot_bringup::ToolVectorActual>(
 //            "/dobot_bringup/msg/ToolVectorActual", 1, dobot_pos_Callback);
     ros::Publisher dobot_pose_pub = nh.advertise<dobot_bringup::ToolVectorActual>("/dobot_bringup/RobotServop", 1);
-
-    ros::Subscriber subscriber_image = nh.subscribe<sensor_msgs::Image>("/image_view/output_mouse_left", 10, imageCallback);
-
     // read tmp robotic arm pose
 //    while (ros::ok() && dobot_pose_flag == false) {
 //        ros::spinOnce();
@@ -114,28 +107,44 @@ int main(int argc, char **argv) {
     rcm_beta = 0;
     double rcm_trans;
     rcm_trans = 0.0;
+
+    /********************************************** CAMERA init *********************************************/
+    cv::namedWindow("usb_cam", cv::WINDOW_AUTOSIZE);
+    //打开摄像头
+    cv::VideoCapture cap(2);
+    if (!cap.isOpened()) {
+        std::cout << "Error opening video stream or file" << std::endl;
+        return -1;
+    }
+
     /**********************************************************************************************************/
 
     // keyboard control prompt words
     cout << "forward w, back s" << endl;
     cout << "left a, right d" << endl;
     cout << "up i, down k" << endl;
-
+    cout << "input now!" << endl;
     while (ros::ok()) {
 
-        cout << "input now!" << endl;
+
         char key_input;
+        cap >> usb_img;
         if (usb_img.empty()) {
-            std::cout << "Image is empty. Cannot display image." << std::endl;
-        } else {
-            cv::imshow("usb_cam", usb_img);
+            std::cout << "empty frame" << std::endl;
+            continue;
+        }
+        //设置大小
+        cv::resize(usb_img, usb_img, cv::Size(640, 480));
+        cv::imshow("usb_cam", usb_img);
+        key_input = cv::waitKey(1000);
+        if (key_input == 'q') {
+            break;
         }
 
 //        while (ros::ok() && dobot_pose_flag == false) {
 //            ros::spinOnce();
 //        }
         dobot_pose_flag = false;
-
 
         /*************************************** fill-in-the-blank code block **************************************/
         // design and add your code for keyboard mapping
@@ -161,6 +170,15 @@ int main(int argc, char **argv) {
                 break;
             case 'i':
                 rcm_trans -= 0.01;
+                break;
+            case 'g':
+                to_green(rcm_alpha,rcm_beta,rcm_trans);
+                break;
+            case 'b':
+                to_blue(rcm_alpha, rcm_beta,rcm_trans);
+                break;
+            case 'y':
+                to_yellow(rcm_alpha, rcm_beta,rcm_trans);
                 break;
         }
 
@@ -282,36 +300,89 @@ int detectHSColor(const cv::Mat &image, double minHue, double maxHue, double min
     mask = hueMask & satMask;
     //检测色块的大小
     int nonZeroPixels = cv::countNonZero(mask);
-
     return nonZeroPixels;
 }
 
-void to_blue(double &rcm_alpha, double &rcm_beta, double &rcm_trans) {
+
+void to_blue(double &rcm_alpha, double &rcm_beta,double &rcm_trans){
 
     double minHue = 110.0; // 蓝色的最小色调值
     double maxHue = 130.0; // 蓝色的最大色调值
     double minSat = 100.0; // 饱和度的最小值
     double maxSat = 255.0; // 饱和度的最大值
-    cv::Mat mask; // 这将是函数返回的掩膜
+    cv::Mat mask; // 函数返回的掩膜
+    cv::Mat world_mask;
     // 调用函数
     int nonZeroPixels = detectHSColor(usb_img, minHue, maxHue, minSat, maxSat, mask);
-    if (nonZeroPixels == 0) {
+    if(nonZeroPixels == 0){
         cout << "not found blue" << endl;
-        rcm_alpha = 0;
-        rcm_beta = 0;
-        rcm_trans = 0;
-        if (cv::getWindowProperty("mask", cv::WND_PROP_AUTOSIZE) == -1) {
+        if(cv::getWindowProperty("mask", cv::WND_PROP_AUTOSIZE) == -1) {
             return;
-        } else {
+        }else {
             cv::destroyWindow("mask");
             return;
         }
     }
-    cv::imshow("mask", mask);
+    cv::imshow("mask",mask);
     cv::Point2d blue_center = detectCenter(mask);
     cout << "blue_center: " << blue_center << endl;
     cout << "blue_size: " << nonZeroPixels << endl;
-    rcm_alpha += (Kp * (blue_center.x - 320) / nonZeroPixels / 180.0 * M_PI);
-    rcm_beta += (Kp * (blue_center.y - 240) / nonZeroPixels / 180.0 * M_PI);
-    rcm_trans += 0.02;
+    rcm_alpha += (0.01*(blue_center.x - 320)/180.0 * M_PI)*Kp;
+    rcm_beta += (0.01*(blue_center.y - 240)/180.0 * M_PI)*Kp;
+    rcm_trans += 0.01*Kp;
+}
+
+void to_green(double &rcm_alpha, double &rcm_beta,double &rcm_trans){
+
+    double minHue = 30.0; // 蓝色的最小色调值
+    double maxHue = 60.0;// 蓝色的最大色调值
+    double minSat = 100.0; // 饱和度的最小值
+    double maxSat = 255.0; // 饱和度的最大值
+    cv::Mat mask; // 函数返回的掩膜
+    // 调用函数
+    int nonZeroPixels = detectHSColor(usb_img, minHue, maxHue, minSat, maxSat, mask);
+    if(nonZeroPixels == 0){
+        cout << "not found green" << endl;
+        if(cv::getWindowProperty("mask", cv::WND_PROP_AUTOSIZE) == -1) {
+            return;
+        }else {
+            cv::destroyWindow("mask");
+            return;
+        }
+    }
+    cv::imshow("mask",mask);
+    cv::Point2d green_center = detectCenter(mask);
+    cout << "green_center: " << green_center << endl;
+    cout << "green_size: " << nonZeroPixels << endl;
+    rcm_alpha += (0.01*(green_center.x - 320)/180.0 * M_PI)*Kp;
+    rcm_beta += (0.01*(green_center.y - 240)/180.0 * M_PI)*Kp;
+    rcm_trans += 0.01*Kp;
+}
+
+
+void to_yellow(double &rcm_alpha, double &rcm_beta,double &rcm_trans){
+
+    double minHue = 0.0; // 黄色的最小色调值
+    double maxHue = 30.0; // 黄色的最大色调值
+    double minSat = 100.0; // 饱和度的最小值
+    double maxSat = 255.0; // 饱和度的最大值
+    cv::Mat mask; // 函数返回的掩膜
+    // 调用函数
+    int nonZeroPixels = detectHSColor(usb_img, minHue, maxHue, minSat, maxSat, mask);
+    if(nonZeroPixels == 0){
+        cout << "not found yellow" << endl;
+        if(cv::getWindowProperty("mask", cv::WND_PROP_AUTOSIZE) == -1) {
+            return;
+        }else {
+            cv::destroyWindow("mask");
+            return;
+        }
+    }
+    cv::imshow("mask",mask);
+    cv::Point2d yellow_center = detectCenter(mask);
+    cout << "yellow_center: " << yellow_center << endl;
+    cout << "yellow_size: " << nonZeroPixels << endl;
+    rcm_alpha += (0.01*(yellow_center.x - 320)/180.0 * M_PI)*Kp;
+    rcm_beta += (0.01*(yellow_center.y - 240)/180.0 * M_PI)*Kp;
+    rcm_trans += 0.01*Kp;
 }

@@ -173,7 +173,6 @@ int main(int argc, char **argv) {
             else if(green_flag == 0)
                 key_input = 'g';
             Kp=0.2;
-
             goto move;
         }
         Kp=1.0;
@@ -454,8 +453,7 @@ void to_blue(double &rcm_alpha, double &rcm_beta,double &rcm_trans){
     cv::Mat world_mask;
     // 调用函数
     int nonZeroPixels = detectHSColor(hand, minHue, maxHue, minSat, maxSat, mask);
-    int world_nonZeroPixels = detectHSColor(world, minHue, maxHue, minSat, maxSat, world_mask);
-    if(world_nonZeroPixels == 0){
+    if(nonZeroPixels == 0){
 //        if(rcm_alpha == 0 && rcm_beta == 0&&rcm_trans== 0){
 //           blue_flag = 1;
 //        }

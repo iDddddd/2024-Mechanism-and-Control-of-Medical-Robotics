@@ -8,7 +8,7 @@ from std_msgs.msg import Int32MultiArray
 if __name__ == "__main__":
     rospy.init_node("hand_tracking")
     pub = rospy.Publisher("/hand_tracking", Int32MultiArray, queue_size=100)
-    rate = rospy.Rate(20)
+    rate = rospy.Rate(10)
     # 打开摄像头
     cap = cv2.VideoCapture(0)
     mpHands = mp.solutions.hands
@@ -22,6 +22,7 @@ if __name__ == "__main__":
     while True:
         ret, img = cap.read()
         img = cv2.flip(img, 1)
+        img = cv2.resize(img, (640, 480))
         if not ret:
             print("Can't receive frame (stream end?). Exiting ...")
             continue
@@ -49,11 +50,7 @@ if __name__ == "__main__":
                         finger_point.append([x,y])
                     if id == 4:
                         cv2.circle(img, (x, y), 15, (255, 0, 0), cv2.FILLED)
-                        # 发布消息
-                        msg = Int32MultiArray()
-                        msg.data = [x, y]
-                        pub.publish(msg)
-
+                        hand_x, hand_y = x, y
 
                 #遍历每一根手指列表，计算其构成的三角形的三边长，这里使用2，6，10，14，18所对应的角进行判断
                 for id,point in enumerate(finger):
@@ -83,22 +80,35 @@ if __name__ == "__main__":
                             pass
                     #检测是否握拳
                     if count == 0:
+                        fist = 1;
                         cv2.putText(img, "Fist", (10, 90), cv2.FONT_HERSHEY_PLAIN, 3, (255, 0, 255), 3)
+                    elif count == 5:
+                        fist = 0;
+                        cv2.putText(img, "Open", (10, 90), cv2.FONT_HERSHEY_PLAIN, 3, (255, 0, 255), 3)
                     else:
+                        fist = 2;
                         pass
-
+            # 发布消息
+            msg = Int32MultiArray()
+            msg.data = [hand_x, hand_y, fist]
+            pub.publish(msg)
             cv2.putText(img, f"Count: {count}", (10, 50), cv2.FONT_HERSHEY_PLAIN, 3, (255, 0, 255), 3)
             cTime = time.time()
             fps = 1 / (cTime - pTime)
             pTime = cTime
             cv2.putText(img, f"FPS: {int(fps)}", (400,50), cv2.FONT_HERSHEY_PLAIN, 3, (255, 0, 255), 3)
+            #标注中心点
+            cv2.circle(img, (320, 240), 15, (255, 0, 0), cv2.FILLED)
+            cv2.line(img, (320, 240), (hand_x, hand_y), (0, 255, 0), 2)
+            #画一个矩形框
+            cv2.rectangle(img, (100, 100), (540, 380), (0, 255, 0), 2)
             cv2.imshow('img', img)
 
             if cv2.waitKey(1) == ord('q'):
                 break
         else:
             msg = Int32MultiArray()
-            msg.data = [0,0]
+            msg.data = [-1,-1,-1]
             pub.publish(msg)
 
 

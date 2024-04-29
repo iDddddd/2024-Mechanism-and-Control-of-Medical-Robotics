@@ -27,7 +27,6 @@
 #include <Eigen/Eigenvalues>
 
 #include <math.h>
-#include <unistd.h>
 #include <termios.h>
 
 #define CVUI_IMPLEMENTATION
@@ -66,6 +65,7 @@ static cv::Mat hmerge;
 static cv::Mat hand;
 int hand_x;
 int hand_y;
+int hand_z;
 static const double Kp = 16.0;
 
 char getch();
@@ -155,7 +155,7 @@ int main(int argc, char **argv) {
     while (ros::ok()) {
 
         cv::imshow("mask", hmerge);
-        cv::waitKey(100);
+        cv::waitKey(500);
 
         /****************************************** gazebo contact check ****************************************/
         // get tmp end pose (CR5_EndPose)
@@ -203,31 +203,32 @@ int main(int argc, char **argv) {
                 rcm_alpha += 1.0 / 180.0 * M_PI;
         */
         //target(rcm_alpha, rcm_beta);
-/*        switch () {
-            case 'w':
-                rcm_alpha += 1.0 / 180.0 * M_PI;
-                break;
-            case 's':
-                rcm_alpha -= 1.0 / 180.0 * M_PI;
-                break;
-            case 'a':
-                rcm_beta += 1.0 / 180.0 * M_PI;
-                break;
-            case 'd':
-                rcm_beta -= 1.0 / 180.0 * M_PI;
-                break;
-            case 'u':
+        cout << "hand_x: " << hand_x << " hand_y: " << hand_y << " hand_z: " << hand_z << endl;
+        if(hand_x!=-1&&hand_y!=-1&&hand_z!=-1){
+            if(abs(hand_x-320)>220){
+                if(hand_x>320){
+                    rcm_alpha -= 0.5 / 180.0 * M_PI;
+                } else if(hand_x<320){
+                    rcm_alpha += 0.5 / 180.0 * M_PI;
+                }
+            }
+            if(abs(hand_y-240)>140){
+                if(hand_y>240){
+                    rcm_beta -= 0.5 / 180.0 * M_PI;
+                } else if(hand_y<240){
+                    rcm_beta += 0.5 / 180.0 * M_PI;
+                }
+            }
+            if(hand_z == 1){
                 rcm_trans += 0.01;
-                break;
-            case 'i':
+            } else if(hand_z == 0) {
                 rcm_trans -= 0.01;
-                break;
-            case 'f':
-                rcm_alpha = 0;
-                rcm_beta = 0;
-                rcm_trans = 0;
-                break;
-        }*/
+            } else if(hand_z == 2){
+
+            }
+
+
+        }
         cout << "rcm_alpha: " << rcm_alpha << endl;
         cout << "rcm_beta: " << rcm_beta << endl;
         cout << "rcm_trans: " << rcm_trans << endl;
@@ -401,7 +402,7 @@ void imageCallback(const sensor_msgs::ImageConstPtr &msg1, const sensor_msgs::Im
 void centerCallback(const std_msgs::Int32MultiArray::ConstPtr &msg){
     hand_x = msg->data[0];
     hand_y = msg->data[1];
-    cout << "hand_x: " << hand_x << " hand_y: " << hand_y << endl;
+    hand_z = msg->data[2];
 }
 // Detect the center of the image
 cv::Point2d detectCenter(cv::Mat image) {
