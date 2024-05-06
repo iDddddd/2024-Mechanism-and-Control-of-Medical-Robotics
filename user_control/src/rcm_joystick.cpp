@@ -133,7 +133,8 @@ int main(int argc, char **argv)
     // Get original joint angle
     VectorXd CR5_joint_angle = CR5_getJointValue(group, joint_model_group);
     cout<<CR5_joint_angle.transpose()<<endl;
-    // Set initial joint angle 
+    // Set initial joint angle
+    reset:
     VectorXd CR5_joint_angle_init = VectorXd::Zero(6);
     CR5_joint_angle_init[0] = 0;
     CR5_joint_angle_init[1] = 0;
@@ -172,7 +173,8 @@ int main(int argc, char **argv)
     /********************************* joystick input & gazebo contact check **********************************/
         while (ros::ok() && joy_flag == false){
             ros::spinOnce();
-
+            cv::imshow("camera", hmerge);
+            cv::waitKey(1);
             Matrix4Xd CR5_EndPose = CR5_getEndPose(group);
             Vector4d ptip_end, ptip_base;
             ptip_end << 0, 0, rcm_len, 1;
@@ -189,6 +191,7 @@ int main(int argc, char **argv)
                 deModel.request.model_name = "rcm_tp_yellow";
                 client.call(deModel);
                 cout<<"rcm_tp_yellow"<<endl;
+                goto reset;
             }
             if((p_blue_wb - ptip_wb).norm() < 0.015)
             {
@@ -197,6 +200,7 @@ int main(int argc, char **argv)
                 deModel.request.model_name = "rcm_tp_blue";
                 client.call(deModel);
                 cout<<"rcm_tp_blue"<<endl;
+                goto reset;
             }
             if((p_green_wb - ptip_wb).norm() < 0.015)
             {
@@ -205,6 +209,7 @@ int main(int argc, char **argv)
                 deModel.request.model_name = "rcm_tp_green";
                 client.call(deModel);
                 cout<<"rcm_tp_green"<<endl;
+                goto reset;
             }        
             if(green_flag == 1&&yellow_flag == 1&&blue_flag == 1)
             // if(green_flag == 1)
@@ -227,19 +232,14 @@ int main(int argc, char **argv)
             rcm_beta += 0.3 / 180.0 * M_PI;
     */
         if (joy_button[3] == 1)
-            rcm_beta += 0.3 / 180.0 * M_PI;
+            to_green(rcm_alpha,rcm_beta,rcm_trans);
         if (joy_button[1] == 1)
-            rcm_beta -= 0.3 / 180.0 * M_PI;
+            to_blue(rcm_alpha,rcm_beta,rcm_trans);
         if (joy_button[2] == 1)
-            rcm_alpha += 0.3 / 180.0 * M_PI;
+            to_yellow(rcm_alpha,rcm_beta,rcm_trans);
         if (joy_button[0] == 1)
             rcm_alpha -= 0.3 / 180.0 * M_PI;
-        if(joy_button[4] == 1)
-            to_green(rcm_alpha,rcm_beta,rcm_trans);
-        if(joy_button[5] == 1)
-            to_blue(rcm_alpha,rcm_beta,rcm_trans);
-        if(joy_button[6] == 1)
-            to_yellow(rcm_alpha,rcm_beta,rcm_trans);
+
 
 
     
@@ -484,7 +484,6 @@ void to_green(double &rcm_alpha, double &rcm_beta,double &rcm_trans){
 }
 
 void to_yellow(double &rcm_alpha, double &rcm_beta,double &rcm_trans){
-    double Kp = 0.8;
     double minHue = 0.0; // 黄色的最小色调值
     double maxHue = 30.0; // 黄色的最大色调值
     double minSat = 100.0; // 饱和度的最小值
@@ -511,7 +510,7 @@ void to_yellow(double &rcm_alpha, double &rcm_beta,double &rcm_trans){
     cout << "yellow_size: " << nonZeroPixels << endl;
     rcm_alpha += (0.01*(yellow_center.x - 320)/180.0 * M_PI)*Kp;
     rcm_beta += (0.01*(yellow_center.y - 240)/180.0 * M_PI)*Kp;
-    rcm_trans += 0.01*Kp;
+    rcm_trans += 0.01*Kp*0.8;
 }
 void arm_reset(double &rcm_alpha, double &rcm_beta,double &rcm_trans){
     if(rcm_alpha > 0.01){
