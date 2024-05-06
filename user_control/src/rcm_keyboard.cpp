@@ -507,11 +507,11 @@ void to_green(double &rcm_alpha, double &rcm_beta,double &rcm_trans){
 }
 
 void to_yellow(double &rcm_alpha, double &rcm_beta,double &rcm_trans){
-
+    double Kp = 0.8;
     double minHue = 0.0; // 黄色的最小色调值
     double maxHue = 30.0; // 黄色的最大色调值
     double minSat = 100.0; // 饱和度的最小值
-    double maxSat = 255.0; // 饱和度的最大值
+    double maxSat = 255.0; // 饱和度的最大值8
     cv::Mat mask; // 这将是函数返回的掩膜
     // 调用函数
     int nonZeroPixels = detectHSColor(hand, minHue, maxHue, minSat, maxSat, mask);

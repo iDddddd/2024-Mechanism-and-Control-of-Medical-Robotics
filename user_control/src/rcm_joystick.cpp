@@ -29,8 +29,22 @@
 #include <sensor_msgs/Joy.h>
 #include <gazebo_msgs/DeleteModel.h>
 
+#define CVUI_IMPLEMENTATION
+
+#include "cvui.h"
+#include "opencv2/opencv.hpp"
+#include "cv_bridge/cv_bridge.h"
+
+#include "sensor_msgs/Image.h"
+#include "message_filters/subscriber.h"
+#include <message_filters/synchronizer.h>
+#include <message_filters/sync_policies/approximate_time.h>
+#include <message_filters/time_synchronizer.h>
+#include <boost/thread/thread.hpp>
+#include <boost/bind.hpp>
+
 #include <moveit/move_group_interface/move_group_interface.h>
-// #include <moveit/planning_scene_interface/planning_scene_interface.h>
+#include <moveit/planning_scene_interface/planning_scene_interface.h>
 
 using namespace std;
 using namespace Eigen;
@@ -39,6 +53,28 @@ void CR5_setEndPose(moveit::planning_interface::MoveGroupInterface &group, Matri
 Matrix4Xd CR5_getEndPose(moveit::planning_interface::MoveGroupInterface &group);
 void CR5_setJointValue(moveit::planning_interface::MoveGroupInterface &group, VectorXd CR5_joint_angle);
 VectorXd CR5_getJointValue(moveit::planning_interface::MoveGroupInterface &group, const robot_state::JointModelGroup* joint_model_group);
+
+
+static cv::Mat hmerge;
+static cv::Mat hand;
+static cv::Mat world;
+bool green_flag = 0;
+bool yellow_flag = 0;
+bool blue_flag = 0;
+bool auto_flag = false;
+static double Kp=1.0;
+
+void arm_reset(double &rcm_alpha, double &rcm_beta,double &rcm_trans);
+
+void imageCallback(const sensor_msgs::ImageConstPtr &msg1, const sensor_msgs::ImageConstPtr &msg2);
+
+cv::Point2d detectCenter(cv::Mat image);
+
+int detectHSColor(const cv::Mat &image, double minHue, double maxHue, double minSat, double maxSat, cv::Mat &mask);
+
+void to_blue(double &rcm_alpha, double &rcm_beta,double &rcm_trans);
+void to_green(double &rcm_alpha, double &rcm_beta,double &rcm_trans);
+void to_yellow(double &rcm_alpha, double &rcm_beta,double &rcm_trans);
 
 
 // callback function for Xbox joystick input
@@ -67,6 +103,15 @@ int main(int argc, char **argv)
 
     ros::ServiceClient client = nh.serviceClient<gazebo_msgs::DeleteModel>("/gazebo/delete_model");
     ros::service::waitForService("/gazebo/delete_model");
+    message_filters::Subscriber<sensor_msgs::Image> subscriber_world(nh, "/world_camera/image_raw", 100,
+                                                                     ros::TransportHints().tcpNoDelay());
+    message_filters::Subscriber<sensor_msgs::Image> subscriber_arm(nh, "/camera/image_raw", 100,
+                                                                   ros::TransportHints().tcpNoDelay());
+
+    typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::Image, sensor_msgs::Image> syncPolicy;
+    //message_filters::TimeSynchronizer<sensor_msgs::LaserScan,geometry_msgs::PoseWithCovarianceStamped> sync(subscriber_laser, subscriber_pose, 10);
+    message_filters::Synchronizer<syncPolicy> sync(syncPolicy(10), subscriber_world, subscriber_arm);
+    sync.registerCallback(boost::bind(imageCallback, _1, _2));
 
     // registration of joystick callback function
     ros::Subscriber joystick_sub = nh.subscribe<sensor_msgs::Joy>("joy",10,joy_Callback);
@@ -75,9 +120,6 @@ int main(int argc, char **argv)
     spinner.start();
     
     /*********************************** gazebo env param init ******************************************/
-    bool green_flag = 0;
-    bool yellow_flag = 0;
-    bool blue_flag = 0;
     bool finish_flag = 0;
     Vector3d p_yellow_wb(0.550602,-0.082265,0.002491);
     Vector3d p_blue_wb(0.464286,-0.128259,0.002491);
@@ -192,6 +234,13 @@ int main(int argc, char **argv)
             rcm_alpha += 0.3 / 180.0 * M_PI;
         if (joy_button[0] == 1)
             rcm_alpha -= 0.3 / 180.0 * M_PI;
+        if(joy_button[4] == 1)
+            to_green(rcm_alpha,rcm_beta,rcm_trans);
+        if(joy_button[5] == 1)
+            to_blue(rcm_alpha,rcm_beta,rcm_trans);
+        if(joy_button[6] == 1)
+            to_yellow(rcm_alpha,rcm_beta,rcm_trans);
+
 
     
     /****************************************** RCM motion iteration *******************************************/
@@ -312,4 +361,178 @@ VectorXd CR5_getJointValue(moveit::planning_interface::MoveGroupInterface &group
 
 }
 
- 
+
+void imageCallback(const sensor_msgs::ImageConstPtr &msg1, const sensor_msgs::ImageConstPtr &msg2) {
+
+    cv::Mat img1_resized;
+    cv::Mat img2_resized;
+    cv::Size size(640, 480); // 新的尺寸，例如640x480
+    cv::Mat img1 = cv_bridge::toCvShare(msg1, "bgr8")->image;
+    cv::Mat img2 = cv_bridge::toCvShare(msg2, "bgr8")->image;
+    cv::resize(img1, img1_resized, size, 0, 0, cv::INTER_LINEAR);
+    cv::resize(img2, img2_resized, size, 0, 0, cv::INTER_LINEAR);
+    hand = img2_resized;
+    world = img1_resized;
+    cv::hconcat(img1_resized, img2_resized, hmerge);
+
+}
+
+
+// Detect the center of the image
+cv::Point2d detectCenter(cv::Mat image) {
+    std::vector<std::vector<cv::Point>> contours;
+    std::vector<cv::Vec4i> hierarchy;
+    cv::findContours(image.clone(), contours, hierarchy, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE, cv::Point(0, 0));
+    std::vector<cv::Moments> mu(contours.size());
+    for (int i = 0; i < contours.size(); i++) {
+        mu[i] = cv::moments(contours[i], false);
+    }
+    vector<cv::Point2f> mc(contours.size());
+    for (int i = 0; i < contours.size(); i++) {
+        mc[i] = cv::Point2f(mu[i].m10 / mu[i].m00, mu[i].m01 / mu[i].m00);
+    }
+
+    cv::Point2d center;
+    center.x = (mc[0].x);
+    center.y = (mc[0].y);
+    return center;
+}
+
+int detectHSColor(const cv::Mat &image, double minHue, double maxHue, double minSat, double maxSat, cv::Mat &mask) {
+    cv::Mat hsv;
+    cv::cvtColor(image, hsv, CV_BGR2HSV);
+    std::vector<cv::Mat> channels;
+    split(hsv, channels);
+    cv::Mat mask1, mask2, hueMask;
+    cv::threshold(channels[0], mask1, maxHue, 255, cv::THRESH_BINARY_INV);
+    cv::threshold(channels[0], mask2, minHue, 255, cv::THRESH_BINARY);
+    if (minHue < maxHue) {
+        hueMask = mask1 & mask2;
+    } else {
+        hueMask = mask1 | mask2;
+    }
+    cv::Mat satMask;
+    inRange(channels[1], minSat, maxSat, satMask);
+    mask = hueMask & satMask;
+    //检测色块的大小
+    int nonZeroPixels = cv::countNonZero(mask);
+
+    return nonZeroPixels;
+}
+
+void to_blue(double &rcm_alpha, double &rcm_beta,double &rcm_trans){
+
+    double minHue = 110.0; // 蓝色的最小色调值
+    double maxHue = 130.0; // 蓝色的最大色调值
+    double minSat = 100.0; // 饱和度的最小值
+    double maxSat = 255.0; // 饱和度的最大值
+    cv::Mat mask; // 这将是函数返回的掩膜
+    cv::Mat world_mask;
+    // 调用函数
+    int nonZeroPixels = detectHSColor(hand, minHue, maxHue, minSat, maxSat, mask);
+    if(nonZeroPixels == 0){
+//        if(rcm_alpha == 0 && rcm_beta == 0&&rcm_trans== 0){
+//           blue_flag = 1;
+//        }
+        cout << "not found blue" << endl;
+
+        if(cv::getWindowProperty("mask", cv::WND_PROP_AUTOSIZE) == -1) {
+            return;
+        }else {
+            cv::destroyWindow("mask");
+            return;
+        }
+    }
+    cv::imshow("mask",mask);
+    cv::Point2d blue_center = detectCenter(mask);
+    cout << "blue_center: " << blue_center << endl;
+    cout << "blue_size: " << nonZeroPixels << endl;
+    rcm_alpha += (0.01*(blue_center.x - 320)/180.0 * M_PI)*Kp;
+    rcm_beta += (0.01*(blue_center.y - 240)/180.0 * M_PI)*Kp;
+    rcm_trans += 0.01*Kp;
+}
+
+void to_green(double &rcm_alpha, double &rcm_beta,double &rcm_trans){
+
+    double minHue = 30.0; // 蓝色的最小色调值
+    double maxHue = 60.0;// 蓝色的最大色调值
+    double minSat = 100.0; // 饱和度的最小值
+    double maxSat = 255.0; // 饱和度的最大值
+    cv::Mat mask; // 这将是函数返回的掩膜
+    // 调用函数
+    int nonZeroPixels = detectHSColor(hand, minHue, maxHue, minSat, maxSat, mask);
+    if(nonZeroPixels == 0){
+//        if(rcm_alpha == 0 && rcm_beta == 0&&rcm_trans== 0){
+//            green_flag = 1;
+//        }
+        cout << "not found green" << endl;
+
+        if(cv::getWindowProperty("mask", cv::WND_PROP_AUTOSIZE) == -1) {
+            return;
+        }else {
+            cv::destroyWindow("mask");
+            return;
+        }
+    }
+    cv::imshow("mask",mask);
+    cv::Point2d green_center = detectCenter(mask);
+    cout << "green_center: " << green_center << endl;
+    cout << "green_size: " << nonZeroPixels << endl;
+    rcm_alpha += (0.01*(green_center.x - 320)/180.0 * M_PI)*Kp;
+    rcm_beta += (0.01*(green_center.y - 240)/180.0 * M_PI)*Kp;
+    rcm_trans += 0.01*Kp;
+}
+
+void to_yellow(double &rcm_alpha, double &rcm_beta,double &rcm_trans){
+    double Kp = 0.8;
+    double minHue = 0.0; // 黄色的最小色调值
+    double maxHue = 30.0; // 黄色的最大色调值
+    double minSat = 100.0; // 饱和度的最小值
+    double maxSat = 255.0; // 饱和度的最大值
+    cv::Mat mask; // 这将是函数返回的掩膜
+    // 调用函数
+    int nonZeroPixels = detectHSColor(hand, minHue, maxHue, minSat, maxSat, mask);
+    if(nonZeroPixels == 0){
+//        if(rcm_alpha == 0 && rcm_beta == 0&&rcm_trans== 0){
+//            yellow_flag = 1;
+//        }
+        cout << "not found yellow" << endl;
+        if(cv::getWindowProperty("mask", cv::WND_PROP_AUTOSIZE) == -1) {
+            return;
+        }else {
+            cv::destroyWindow("mask");
+            return;
+        }
+    }
+    cv::imshow("mask",mask);
+
+    cv::Point2d yellow_center = detectCenter(mask);
+    cout << "yellow_center: " << yellow_center << endl;
+    cout << "yellow_size: " << nonZeroPixels << endl;
+    rcm_alpha += (0.01*(yellow_center.x - 320)/180.0 * M_PI)*Kp;
+    rcm_beta += (0.01*(yellow_center.y - 240)/180.0 * M_PI)*Kp;
+    rcm_trans += 0.01*Kp;
+}
+void arm_reset(double &rcm_alpha, double &rcm_beta,double &rcm_trans){
+    if(rcm_alpha > 0.01){
+        rcm_alpha -= 0.01;
+    }else if(rcm_alpha < -0.01){
+        rcm_alpha += 0.01;
+    } else{
+        rcm_alpha = 0;
+    }
+    if(rcm_beta > 0.01){
+        rcm_beta -= 0.01;
+    }else if(rcm_beta < -0.01){
+        rcm_beta += 0.01;
+    } else{
+        rcm_beta = 0;
+    }
+    if(rcm_trans > 0.01){
+        rcm_trans -= 0.01;
+    } else if(rcm_trans < -0.01){
+        rcm_trans += 0.01;
+    }else{
+        rcm_trans = 0;
+    }
+}

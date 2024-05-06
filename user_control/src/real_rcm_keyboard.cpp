@@ -32,14 +32,7 @@
 #include "cvui.h"
 #include "opencv2/opencv.hpp"
 #include "cv_bridge/cv_bridge.h"
-
-#include "sensor_msgs/Image.h"
-#include "message_filters/subscriber.h"
-#include <message_filters/synchronizer.h>
-#include <message_filters/sync_policies/approximate_time.h>
-#include <message_filters/time_synchronizer.h>
 #include <boost/thread/thread.hpp>
-#include <boost/bind.hpp>
 
 using namespace std;
 using namespace Eigen;
@@ -135,8 +128,11 @@ int main(int argc, char **argv) {
         }
         //设置大小
         cv::resize(usb_img, usb_img, cv::Size(640, 480));
+        //画中心点
+       // cv::circle(usb_img, cv::Point(320, 240), 5, cv::Scalar(0, 0, 255), -1);
+       //显示图像
         cv::imshow("usb_cam", usb_img);
-        key_input = cv::waitKey(1000);
+        key_input = cv::waitKey(10);
         if (key_input == 'q') {
             break;
         }
@@ -172,13 +168,13 @@ int main(int argc, char **argv) {
                 rcm_trans -= 0.01;
                 break;
             case 'g':
-                to_green(rcm_alpha,rcm_beta,rcm_trans);
+                to_green(rcm_alpha, rcm_beta, rcm_trans);
                 break;
             case 'b':
-                to_blue(rcm_alpha, rcm_beta,rcm_trans);
+                to_blue(rcm_alpha, rcm_beta, rcm_trans);
                 break;
             case 'y':
-                to_yellow(rcm_alpha, rcm_beta,rcm_trans);
+                to_yellow(rcm_alpha, rcm_beta, rcm_trans);
                 break;
         }
 
@@ -304,8 +300,9 @@ int detectHSColor(const cv::Mat &image, double minHue, double maxHue, double min
 }
 
 
-void to_blue(double &rcm_alpha, double &rcm_beta,double &rcm_trans){
+void to_blue(double &rcm_alpha, double &rcm_beta, double &rcm_trans) {
 
+    double Kp = 0.6;
     double minHue = 110.0; // 蓝色的最小色调值
     double maxHue = 130.0; // 蓝色的最大色调值
     double minSat = 100.0; // 饱和度的最小值
@@ -314,26 +311,27 @@ void to_blue(double &rcm_alpha, double &rcm_beta,double &rcm_trans){
     cv::Mat world_mask;
     // 调用函数
     int nonZeroPixels = detectHSColor(usb_img, minHue, maxHue, minSat, maxSat, mask);
-    if(nonZeroPixels == 0){
+    if (nonZeroPixels == 0) {
         cout << "not found blue" << endl;
-        if(cv::getWindowProperty("mask", cv::WND_PROP_AUTOSIZE) == -1) {
+        if (cv::getWindowProperty("mask", cv::WND_PROP_AUTOSIZE) == -1) {
             return;
-        }else {
+        } else {
             cv::destroyWindow("mask");
             return;
         }
     }
-    cv::imshow("mask",mask);
+    cv::imshow("mask", mask);
     cv::Point2d blue_center = detectCenter(mask);
     cout << "blue_center: " << blue_center << endl;
     cout << "blue_size: " << nonZeroPixels << endl;
-    rcm_alpha += (0.01*(blue_center.x - 320)/180.0 * M_PI)*Kp;
-    rcm_beta += (0.01*(blue_center.y - 240)/180.0 * M_PI)*Kp;
-    rcm_trans += 0.01*Kp;
+    rcm_alpha += (0.01 * (blue_center.x - 320) / 180.0 * M_PI) * Kp;
+    rcm_beta += (0.01 * (blue_center.y - 240) / 180.0 * M_PI) * Kp;
+    rcm_trans += 0.01 * Kp;
 }
 
-void to_green(double &rcm_alpha, double &rcm_beta,double &rcm_trans){
+void to_green(double &rcm_alpha, double &rcm_beta, double &rcm_trans) {
 
+    double Kp = 0.5;
     double minHue = 30.0; // 蓝色的最小色调值
     double maxHue = 60.0;// 蓝色的最大色调值
     double minSat = 100.0; // 饱和度的最小值
@@ -341,27 +339,28 @@ void to_green(double &rcm_alpha, double &rcm_beta,double &rcm_trans){
     cv::Mat mask; // 函数返回的掩膜
     // 调用函数
     int nonZeroPixels = detectHSColor(usb_img, minHue, maxHue, minSat, maxSat, mask);
-    if(nonZeroPixels == 0){
+    if (nonZeroPixels == 0) {
         cout << "not found green" << endl;
-        if(cv::getWindowProperty("mask", cv::WND_PROP_AUTOSIZE) == -1) {
+        if (cv::getWindowProperty("mask", cv::WND_PROP_AUTOSIZE) == -1) {
             return;
-        }else {
+        } else {
             cv::destroyWindow("mask");
             return;
         }
     }
-    cv::imshow("mask",mask);
+    cv::imshow("mask", mask);
     cv::Point2d green_center = detectCenter(mask);
     cout << "green_center: " << green_center << endl;
     cout << "green_size: " << nonZeroPixels << endl;
-    rcm_alpha += (0.01*(green_center.x - 320)/180.0 * M_PI)*Kp;
-    rcm_beta += (0.01*(green_center.y - 240)/180.0 * M_PI)*Kp;
-    rcm_trans += 0.01*Kp;
+    rcm_alpha += (0.01 * (green_center.x - 320) / 180.0 * M_PI) * Kp;
+    rcm_beta += (0.01 * (green_center.y - 240) / 180.0 * M_PI) * Kp;
+    rcm_trans += 0.01 * Kp;
 }
 
 
-void to_yellow(double &rcm_alpha, double &rcm_beta,double &rcm_trans){
+void to_yellow(double &rcm_alpha, double &rcm_beta, double &rcm_trans) {
 
+    double Kp = 0.4;
     double minHue = 0.0; // 黄色的最小色调值
     double maxHue = 30.0; // 黄色的最大色调值
     double minSat = 100.0; // 饱和度的最小值
@@ -369,20 +368,20 @@ void to_yellow(double &rcm_alpha, double &rcm_beta,double &rcm_trans){
     cv::Mat mask; // 函数返回的掩膜
     // 调用函数
     int nonZeroPixels = detectHSColor(usb_img, minHue, maxHue, minSat, maxSat, mask);
-    if(nonZeroPixels == 0){
+    if (nonZeroPixels == 0) {
         cout << "not found yellow" << endl;
-        if(cv::getWindowProperty("mask", cv::WND_PROP_AUTOSIZE) == -1) {
+        if (cv::getWindowProperty("mask", cv::WND_PROP_AUTOSIZE) == -1) {
             return;
-        }else {
+        } else {
             cv::destroyWindow("mask");
             return;
         }
     }
-    cv::imshow("mask",mask);
+    cv::imshow("mask", mask);
     cv::Point2d yellow_center = detectCenter(mask);
     cout << "yellow_center: " << yellow_center << endl;
     cout << "yellow_size: " << nonZeroPixels << endl;
-    rcm_alpha += (0.01*(yellow_center.x - 320)/180.0 * M_PI)*Kp;
-    rcm_beta += (0.01*(yellow_center.y - 240)/180.0 * M_PI)*Kp;
-    rcm_trans += 0.01*Kp;
+    rcm_alpha += (0.01 * (yellow_center.x - 320) / 180.0 * M_PI) * Kp;
+    rcm_beta += (0.01 * (yellow_center.y - 240) / 180.0 * M_PI) * Kp;
+    rcm_trans += 0.01 * Kp;
 }
